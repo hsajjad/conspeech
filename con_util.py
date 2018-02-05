@@ -3,17 +3,17 @@ import operator
 import os
 import random
 from collections import defaultdict
-from scipy.stats import futil
+#from scipy.stats import futil
 from sklearn import preprocessing
 import numpy as np
 from sklearn.feature_extraction import DictVectorizer
 import re
 import sys
 from nltk import pos_tag
+import subprocess
 
-
-# Project: Political Speech Generator
-# Author:  Valentin Kassarnig
+# Project: Ted Talk Generator
+# Author:  Valentin Kassarnig, Modified by Hassan Sajjad (hasaan.sajjad@gmail.com)
 # Email:   valentin.kassarnig@gmail.com
 
 
@@ -25,12 +25,23 @@ NUMBER = "<number>"
 
 
 
-classes = ['DY','DN','RY','RN']
+classes = ['DY','DN']
 
 
 vocab_count = defaultdict(float)
 
-def construct_dataset(paths):
+def get_relevant_docs(keyword, f_model):
+    import gensim
+    from gensim import utils
+    from gensim.models import Doc2Vec
+    model = Doc2Vec.load(f_model)
+    word_vec = model[keyword]
+    rank = model.docvecs.most_similar([word_vec], topn=len(model.docvecs))
+    return rank
+    
+
+def construct_dataset(paths, positive, negative):
+    
     print "[constructing dataset...]"
     dataset = dict()
     
@@ -43,18 +54,25 @@ def construct_dataset(paths):
     vocab.add(END_OF_SENTENCE)
     #for l in labels:
     #    dataset[l] = []
-
+    count = 0
+    label = ""
     for p in paths:
         for f in sorted(os.listdir(p)): 
             #006_400102_0002030_DON.txt
-            vote = f[21:22]
-            party = f[19:20]
-            label = party + vote
+            if f in positive:
+                label = "DY"
+                
+            else:
+                label = "DN"
+             
+            #vote = f[21:22]
+            #party = f[19:20]
+            #label = party + vote
             if label not in classes:
                 continue;
             with open(os.path.join(p,f),'r') as doc:
                 content = doc.read()
-
+                
                 content = content.replace('; center ', '; ')
                 content = content.replace(' /center ', ' ')
                 content = content.replace(' em ', ' ')
@@ -94,13 +112,15 @@ def construct_dataset(paths):
                 content = content.replace(chr(0x90), '')
 
                 #lines = content.split(" . ")
-                lines = re.split(r' \.  | \!  | \?  ',content)
+                #lines = re.split(r' \.  | \!  | \?  ',content)
+                lines = re.split(r' \. | \! | \? | \; ',content) # TED
+                
                 lines = [x.strip() for x in lines]
                 lines = filter(lambda a: (a.strip() != ''), lines)
 
-                if len(lines) <= 1:
+                if len(lines) <= 1:  
                     continue
-
+          
 
                 for idx,line in enumerate(lines):
                     lines[idx] = lines[idx] + ' ' + END_OF_SENTENCE
@@ -112,7 +132,7 @@ def construct_dataset(paths):
 
                 lines.insert(0,START_OF_SPEECH)
                 lines.append(END_OF_SPEECH)
-
+                    
                 dataset[label].append(lines)
 
     print "[dataset constructed.]"

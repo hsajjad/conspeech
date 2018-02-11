@@ -19,7 +19,7 @@ import subprocess
 
 START_OF_SPEECH = "__START__"
 END_OF_SPEECH = "__END__"
-END_OF_SENTENCE = "__STOP__"
+END_OF_SENTENCE = "."
 REFERENCE = "<ref>"
 NUMBER = "<number>"
 
@@ -30,15 +30,22 @@ classes = ['DY','DN']
 
 vocab_count = defaultdict(float)
 
-def get_relevant_docs(keyword, f_model):
+def get_relevant_docs(keywords, f_model):
     import gensim
     from gensim import utils
     from gensim.models import Doc2Vec
     model = Doc2Vec.load(f_model)
-    word_vec = model[keyword]
+    word_vec = None
+    for keyword in keywords:
+        curr_vec = model[keyword]
+        if word_vec is None:
+            word_vec = curr_vec
+        else:
+            word_vec = np.add(curr_vec, word_vec)
+    word_vec = word_vec/len(keywords)
+    print (len(word_vec))
     rank = model.docvecs.most_similar([word_vec], topn=len(model.docvecs))
-    return rank
-    
+    return rank    
 
 def construct_dataset(paths, positive, negative):
     
@@ -58,12 +65,16 @@ def construct_dataset(paths, positive, negative):
     label = ""
     for p in paths:
         for f in sorted(os.listdir(p)): 
-            #006_400102_0002030_DON.txt
+            #print (f)
             if f in positive:
+                #print ("positive")
                 label = "DY"
                 
-            else:
+            elif f in negative:
+                #print ("negative")
                 label = "DN"
+            else:
+                continue
              
             #vote = f[21:22]
             #party = f[19:20]
@@ -112,13 +123,14 @@ def construct_dataset(paths, positive, negative):
                 content = content.replace(chr(0x90), '')
 
                 #lines = content.split(" . ")
-                #lines = re.split(r' \.  | \!  | \?  ',content)
-                lines = re.split(r' \. | \! | \? | \; ',content) # TED
+                lines = re.split(r' \. | \! | \? ',content)
+                #lines = re.split(r' \. | \! | \? | \; ',content) # TED
                 
                 lines = [x.strip() for x in lines]
                 lines = filter(lambda a: (a.strip() != ''), lines)
 
                 if len(lines) <= 1:  
+                    print (f, "empty")
                     continue
           
 
@@ -132,7 +144,7 @@ def construct_dataset(paths, positive, negative):
 
                 lines.insert(0,START_OF_SPEECH)
                 lines.append(END_OF_SPEECH)
-                    
+                
                 dataset[label].append(lines)
 
     print "[dataset constructed.]"
@@ -178,7 +190,8 @@ def jk_pos_tag_filter(dataset):
                 if len(words) < 3:
                     continue
 
-                tags = pos_tag(words)            
+                tags = pos_tag(words)
+                
                 if ([tags[0][1], tags[1][1]] in jk_bigram_filter) and (tags[2][1] is not 'NN'):
                     tw = tags[0][0]+' '+tags[1][0]
                     jk[key][tw]+=1
